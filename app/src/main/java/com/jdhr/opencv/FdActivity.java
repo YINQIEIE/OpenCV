@@ -9,7 +9,7 @@ import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
-import org.opencv.core.Core;
+import org.opencv.android.Utils;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
 import org.opencv.core.Rect;
@@ -17,54 +17,73 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
+import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.objdetect.CascadeClassifier;
 import org.opencv.imgproc.Imgproc;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.SystemClock;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.WindowManager;
+import android.widget.Toast;
+
+import com.jdhr.http.RetrofitManager;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class FdActivity extends Activity implements CvCameraViewListener2 {
 
-    private static final String    TAG                 = "OCVSample::Activity";
-    private static final Scalar    FACE_RECT_COLOR     = new Scalar(0, 255, 0, 255);
-    public static final int        JAVA_DETECTOR       = 0;
-    public static final int        NATIVE_DETECTOR     = 1;
+    private static final String TAG = "OCVSample::Activity";
+    private static final Scalar FACE_RECT_COLOR = new Scalar(255, 255, 0, 255);
+    public static final int JAVA_DETECTOR = 0;
+    public static final int NATIVE_DETECTOR = 1;
 
-    private MenuItem               mItemFace50;
-    private MenuItem               mItemFace40;
-    private MenuItem               mItemFace30;
-    private MenuItem               mItemFace20;
-    private MenuItem               mItemType;
+    private MenuItem mItemFace50;
+    private MenuItem mItemFace40;
+    private MenuItem mItemFace30;
+    private MenuItem mItemFace20;
+    private MenuItem mItemType;
 
-    private Mat                    mRgba;
-    private Mat                    mGray;
-    private File                   mCascadeFile;
-    private CascadeClassifier      mJavaDetector;
-    private DetectionBasedTracker  mNativeDetector;
+    private Mat mRgba;
+    private Mat mGray;
+    private File mCascadeFile;
+    private CascadeClassifier mJavaDetector;
+    private DetectionBasedTracker mNativeDetector;
 
-    private int                    mDetectorType       = JAVA_DETECTOR;
-    private String[]               mDetectorName;
+    private int mDetectorType = JAVA_DETECTOR;
+    private String[] mDetectorName;
 
-    private float                  mRelativeFaceSize   = 0.2f;
-    private int                    mAbsoluteFaceSize   = 0;
+    private float mRelativeFaceSize = 0.2f;
+    private int mAbsoluteFaceSize = 100;
 
-    private CameraBridgeViewBase   mOpenCvCameraView;
+    private CameraBridgeViewBase mOpenCvCameraView;
 
-    private BaseLoaderCallback  mLoaderCallback = new BaseLoaderCallback(this) {
+    static {
+        System.loadLibrary("detection_based_tracker");
+        System.loadLibrary("opencv_java3");
+    }
+
+    private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
             switch (status) {
-                case LoaderCallbackInterface.SUCCESS:
-                {
+                case LoaderCallbackInterface.SUCCESS: {
                     Log.i(TAG, "OpenCV loaded successfully");
 
                     // Load native library after(!) OpenCV initialization
-                    System.loadLibrary("detection_based_tracker");
+//                    System.loadLibrary("detection_based_tracker");
 
                     try {
                         // load cascade file from application resources
@@ -98,11 +117,12 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
                     }
 
                     mOpenCvCameraView.enableView();
-                } break;
-                default:
-                {
+                }
+                break;
+                default: {
                     super.onManagerConnected(status);
-                } break;
+                }
+                break;
             }
         }
     };
@@ -115,7 +135,9 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         Log.i(TAG, "Instantiated new " + this.getClass());
     }
 
-    /** Called when the activity is first created. */
+    /**
+     * Called when the activity is first created.
+     */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Log.i(TAG, "called onCreate");
@@ -127,23 +149,23 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.fd_activity_surface_view);
         mOpenCvCameraView.setVisibility(CameraBridgeViewBase.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
+        //TODO 将百度地址换成自己服务的人脸比对接口地址
+        RetrofitManager.init("http://www.baidu.com/");
     }
 
     @Override
-    public void onPause()
-    {
+    public void onPause() {
         super.onPause();
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
     }
 
     @Override
-    public void onResume()
-    {
+    public void onResume() {
         super.onResume();
         if (!OpenCVLoader.initDebug()) {
             Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
+//            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
         } else {
             Log.d(TAG, "OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
@@ -155,16 +177,21 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         mOpenCvCameraView.disableView();
     }
 
+    @Override
     public void onCameraViewStarted(int width, int height) {
         mGray = new Mat();
         mRgba = new Mat();
+        if (width > 0 && height > 0)
+            frameBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
     }
 
+    @Override
     public void onCameraViewStopped() {
         mGray.release();
         mRgba.release();
     }
 
+    @Override
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
 
         mRgba = inputFrame.rgba();
@@ -182,23 +209,73 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
         if (mDetectorType == JAVA_DETECTOR) {
             if (mJavaDetector != null)
-                mJavaDetector.detectMultiScale(mGray, faces, 1.1, 2, 2, // TODO: objdetect.CV_HAAR_SCALE_IMAGE
-                        new Size(mAbsoluteFaceSize, mAbsoluteFaceSize), new Size());
-        }
-        else if (mDetectorType == NATIVE_DETECTOR) {
+                // TODO: objdetect.CV_HAAR_SCALE_IMAGE
+                mJavaDetector.detectMultiScale(mGray
+                        , faces
+                        , 1.1
+                        , 8
+                        , 2
+                        , new Size(mAbsoluteFaceSize, mAbsoluteFaceSize), new Size());
+        } else if (mDetectorType == NATIVE_DETECTOR) {
             if (mNativeDetector != null)
                 mNativeDetector.detect(mGray, faces);
-        }
-        else {
+        } else {
             Log.e(TAG, "Detection method is not selected!");
         }
-
         Rect[] facesArray = faces.toArray();
-        for (int i = 0; i < facesArray.length; i++)
+        for (int i = 0; i < facesArray.length; i++) {
+            Utils.matToBitmap(mRgba, frameBitmap);
             Imgproc.rectangle(mRgba, facesArray[i].tl(), facesArray[i].br(), FACE_RECT_COLOR, 3);
-
+//            Imgcodecs.imwrite(fileName, mRgba);//保存图片泛绿
+            //整张保存
+            String fileName = BitmapUtil.saveBitmap(frameBitmap);
+            //只保存人脸
+//            Utils.matToBitmap(mRgba, frameBitmap);
+//            Rect faceRect = facesArray[i].clone();
+//            faceBitmap = Bitmap.createBitmap(frameBitmap, faceRect.x, faceRect.y, faceRect.width, faceRect.height);
+//            String fileName = BitmapUtil.saveBitmap(faceBitmap);
+            fr(fileName);//上传图片，服务端进行人脸比对
+        }
         return mRgba;
     }
+
+    private boolean handle = true;
+
+    private void fr(String path) {
+        if (!handle) return;
+        handle = false;
+        if (!TextUtils.isEmpty(path)) {
+            Call<FaceFResponse> frCall = FileUploadUtil.uploadFile(new File(path));
+            frCall.enqueue(new Callback<FaceFResponse>() {
+                @Override
+                public void onResponse(Call<FaceFResponse> call, Response<FaceFResponse> response) {
+                    FaceFResponse faceFResponse = response.body();
+                    if (null != faceFResponse) {
+                        if (faceFResponse.getSuccess() == 0) {
+                            runOnUiThread(() -> Toast.makeText(FdActivity.this, faceFResponse.getErrorMessage(), Toast.LENGTH_SHORT).show());
+                            Toast.makeText(FdActivity.this, faceFResponse.getErrorMessage(), Toast.LENGTH_SHORT).show();
+//                                runOnUiThread(new ShowFRResultRunnable(faceFResponse.getErrorMessage()));
+                        }
+//                            log(response.body().toString());
+                    }
+                    new Thread(() -> {
+                        SystemClock.sleep(1000);
+                        handle = true;
+                    }).start();
+
+                }
+
+                @Override
+                public void onFailure(Call<FaceFResponse> call, Throwable t) {
+                    Log.e("FR Failed", t.getMessage());
+                    handle = true;
+                }
+            });
+        }
+    }
+
+    private Bitmap frameBitmap;
+    private Bitmap faceBitmap;
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -207,7 +284,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         mItemFace40 = menu.add("Face size 40%");
         mItemFace30 = menu.add("Face size 30%");
         mItemFace20 = menu.add("Face size 20%");
-        mItemType   = menu.add(mDetectorName[mDetectorType]);
+        mItemType = menu.add(mDetectorName[mDetectorType]);
         return true;
     }
 
