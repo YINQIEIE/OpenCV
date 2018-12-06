@@ -10,6 +10,7 @@ import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
+import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
 import org.opencv.core.Rect;
@@ -58,6 +59,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
     private Mat mRgba;
     private Mat mGray;
+    private Mat mRgbaT;
     private File mCascadeFile;
     private CascadeClassifier mJavaDetector;
     private DetectionBasedTracker mNativeDetector;
@@ -65,10 +67,14 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
     private int mDetectorType = JAVA_DETECTOR;
     private String[] mDetectorName;
 
-    private float mRelativeFaceSize = 0.2f;
-    private int mAbsoluteFaceSize = 100;
+    private float mRelativeFaceSize = 0.2f;//没有设置人脸尺寸的时候监测的比例，人脸小于这个不进行识别
+    private int mAbsoluteFaceSize = 100;//最小的识别尺寸
 
     private CameraBridgeViewBase mOpenCvCameraView;
+
+    private Bitmap frameBitmap;
+    private Bitmap faceBitmap;
+    private boolean handle = true;
 
     static {
         System.loadLibrary("detection_based_tracker");
@@ -239,8 +245,6 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         return mRgba;
     }
 
-    private boolean handle = true;
-
     private void fr(String path) {
         if (!handle) return;
         handle = false;
@@ -273,9 +277,6 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
             });
         }
     }
-
-    private Bitmap frameBitmap;
-    private Bitmap faceBitmap;
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
